@@ -102,8 +102,8 @@ a4 00 14
 64
 #save new n
 36 00
-#Jump to begin of loop (a4 line), go back 17
-a7 ff ef
+#Jump to where stack is set before loop, go back 21
+a7 ff eb
 #Load final result
 15 01
 #return with result
