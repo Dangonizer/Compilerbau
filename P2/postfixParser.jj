@@ -1,0 +1,62 @@
+PARSER_BEGIN(PostFix)
+
+/** Simple brace matcher. */
+public class PostFix {
+
+  /** Main entry point. */
+  public static void main(String args[]) {
+    try {
+      PostFix parser = new PostFix(System.in);
+      String s = parser.start();
+      System.out.println(s);
+    } catch (ParseException e) {
+      System.err.println(e.getMessage());
+    }
+  }
+
+}
+
+PARSER_END(PostFix)
+
+
+SKIP : {
+    " "
+  | "\t"
+  | "\n"
+  | "\r"
+  }
+  
+  TOKEN : {
+    < number: "0" | (["1"-"9"] (["0"-"9"])*) >
+    | < opsum: "+" | "-" >
+    | < opprod: "*" | "/" >
+  }
+  
+
+/** Root production. */
+String start() :
+{String s;}
+{
+    s=summe()
+    <EOF>
+    {return s;}
+}
+
+String summe():
+{String s1; String s2; Token t;}
+{
+    s1=product() (t=<opsum> s2=product() {s1 = s1 + " " + s2 + " " + t.image;})* {return s1;}
+}
+
+String product():
+{String s1; String s2; Token t;}
+{
+    s1=term() (t=<opprod> s2=term() {s1= s1 + " " + s2 + " " + t.image;})* {return s1;}
+}
+
+String term():
+{String s; Token t;}
+{
+    t=<number> {return t.image;}
+  | "(" s=summe() ")" {return s;}
+}
