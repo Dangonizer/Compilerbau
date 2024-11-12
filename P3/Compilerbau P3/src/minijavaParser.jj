@@ -1,0 +1,124 @@
+PARSER_BEGIN(Parser)
+
+/** Simple brace matcher. */
+public class Parser {
+
+  /** Main entry point. */
+  public static void main(String args[]) {
+    try {
+      Parser parser = new Parser(System.in);
+      parser.start();
+      System.out.println("Ausdruck syntaktisch ok!");
+    } catch (ParseException e) {
+      System.err.println(e.getMessage());
+    }
+  }
+
+}
+
+PARSER_END(Parser)
+
+
+SKIP : {
+    " "
+  | "\t"
+  | "\n"
+  | "\r"
+  }
+  
+  TOKEN : {
+        <FINAL: "final">
+        | <WHILE: "while">
+        | <IF: "if">
+        | <ELSE: "else">
+        | <PRINT: "print">
+        | <INT: "int">
+
+        | <ident: ["a"-"z"] (["a"-"z"] | ["A"-"Z"] | ["0"-"9"])*>
+        | <number: "0" | (["1"-"9"] (["0"-"9"])*) >
+        | <comOP: "<" | ">" | "<=" | ">=" | "==" | "!=">
+        | <assignOP: "=">
+        | <opsum: "+" | "-" >
+        | <opprod: "*" | "/" >
+  }
+  
+
+/** Root production. */
+void start() :
+{}
+{
+    programm()
+    <EOF>
+}
+
+void programm():{}{
+    constDecl()
+    varDecl()
+    statement()
+}
+
+void constDecl():{}{
+    (<FINAL> <INT> constZuw() constList() ";")?
+}
+
+void constZuw():{}{
+    <ident> <assignOP> <number>
+}
+
+void constList():{}{
+    ("," constZuw() constList())?
+}
+
+void varDecl():{}{
+    (<INT> <ident> varZuw() varList() ";")?
+}
+
+void varZuw():{}{
+    (<assignOP> <number>)?
+}
+
+void varList():{}{
+    ("," <ident> varZuw() varList())?
+}
+
+void expression():{}{
+    term() summe()
+}
+
+void summe():{}{
+    (<opsum> term() summe())?
+}
+
+void term():{}{
+    faktor() product()
+}
+
+void product():{}{
+    (<opprod> faktor() product())?
+}
+
+void faktor():{}{
+    <number>
+    | <ident>
+    | ("(" expression() ")")
+}
+
+void condition():{}{
+    expression() <comOP> expression()
+}
+
+void statement():{}{
+    (<ident> <assignOP> expression() ";")
+    | (<PRINT> "(" expression() ")" ";")
+    | ("{" stmtLIST() "}")
+    | (<IF> condition() statement() optELSE())
+    | (<WHILE> condition() statement())
+}
+
+void optELSE():{}{
+    (<ELSE> statement() )?
+}
+
+void stmtLIST():{}{
+    (statement() stmtLIST())?
+}
