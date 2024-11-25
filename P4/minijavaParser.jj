@@ -1,0 +1,210 @@
+PARSER_BEGIN(MiniJavaExpParser)
+import java.util.HashMap;
+import java.util.HexFormat;
+/** Simple brace matcher. */
+public class MiniJavaExpParser {
+    public static SymTable st = new SymTable();
+
+  /** Main entry point. */
+  public static void main(String args[]) {
+    try {
+      MiniJavaExpParser parser = new MiniJavaExpParser(System.in);
+      System.out.println(parser.start());
+    } catch (Exception e) {
+      System.err.println(e.getMessage());
+    }
+  }
+
+  public static String numberToHex(String num){
+        return String.format("%02x",Integer.valueOf(num));
+  }
+
+}
+
+class SymbolAlreadyDefinedException extends Exception {
+    public SymbolAlreadyDefinedException(String error){
+        super(error);
+    }
+}
+
+class UnknownSymbolException extends Exception {
+    public UnknownSymbolException(String error){
+        super(error);
+    }
+}
+
+class Symbol{
+      public String val;
+      public Boolean isVar;
+      public Symbol(String v, Boolean i){
+          val=v;
+          isVar=i;
+      }
+}
+
+class SymTable {
+    HashMap<String,Symbol> tb = new HashMap<>();
+    int nextVarAdress = 1;
+
+    void addConstant(String id, String wert) throws SymbolAlreadyDefinedException{
+        if (tb.containsKey(id))
+            throw new SymbolAlreadyDefinedException("Symbol " + id + " already defined.");
+        tb.put(id,new Symbol(wert,false));
+    }
+
+    void addVariable(String id) throws SymbolAlreadyDefinedException{
+        if (tb.containsKey(id))
+            throw new SymbolAlreadyDefinedException("Symbol " + id + " already defined.");
+        tb.put(id,new Symbol(String.valueOf(nextVarAdress++),true));
+    }
+
+    Symbol getSymbol(String id) throws UnknownSymbolException{
+        if(!tb.containsKey(id))
+            throw new UnknownSymbolException("Symbol " + id + " not defined.");
+        return tb.get(id);
+    }
+}
+
+
+
+
+
+
+PARSER_END(MiniJavaExpParser)
+
+
+SKIP : {
+    " "
+  | "\t"
+  | "\n"
+  | "\r"
+  }
+  
+  TOKEN : {
+        <FINAL: "final">
+        | <WHILE: "while">
+        | <IF: "if">
+        | <ELSE: "else">
+        | <PRINT: "print">
+        | <INT: "int">
+
+        | <ident: ["a"-"z"] (["a"-"z"] | ["A"-"Z"] | ["0"-"9"])*>
+        | <number: "0" | (["1"-"9"] (["0"-"9"])*) >
+        | <comOP: "<" | ">" | "<=" | ">=" | "==" | "!=">
+        | <assignOP: "=">
+        | <opsum: "+" | "-" >
+        | <opprod: "*" | "/" >
+  }
+  
+
+/** Root production. */
+String start()throws SymbolAlreadyDefinedException, UnknownSymbolException :
+{String s;}
+{
+    s=programm()
+    <EOF>
+    {return s;}
+}
+
+String programm()throws SymbolAlreadyDefinedException, UnknownSymbolException:{String vc; String s;}{
+    constDecl()
+    vc=varDecl()
+    s=statement()
+    {return vc + s;}
+}
+
+void constDecl()throws SymbolAlreadyDefinedException, UnknownSymbolException:{}{
+    (<FINAL> <INT> constZuw() constList() ";")?
+}
+
+void constZuw()throws SymbolAlreadyDefinedException, UnknownSymbolException:{Token id; Token val;}{
+                     id=<ident> <assignOP> val=<number> {st.addConstant(id.image,val.image);}
+}
+
+void constList()throws SymbolAlreadyDefinedException, UnknownSymbolException:{}{
+    ("," constZuw() constList())?
+}
+
+String varDecl()throws SymbolAlreadyDefinedException, UnknownSymbolException:{Token id; Token val; String var; String s="";}{
+    (
+        <INT> id=<ident>
+        val=varZuw() {
+            st.addVariable(id.image);
+            Symbol sym=st.getSymbol(id.image);
+            if (val == null) {s = s + "100036" + numberToHex(sym.val);}
+            else {s = s + "10" + numberToHex(val.image) + "36" + numberToHex(sym.val);}
+        }
+        var=varList() ";"
+        {s = s + var;}
+    )?
+    {return s;}
+}
+
+Token varZuw()throws SymbolAlreadyDefinedException, UnknownSymbolException:{Token val=null;}{
+    (<assignOP> val=<number>)? {return val;}
+}
+
+String varList()throws SymbolAlreadyDefinedException, UnknownSymbolException:{Token id; Token val; String var; String s="";}{
+    (
+        "," id=<ident>
+        val=varZuw() {
+             st.addVariable(id.image);
+             Symbol sym=st.getSymbol(id.image);
+             if (val == null) {s = s + "100036" + numberToHex(sym.val);}
+             else {s = s + "10" + numberToHex(val.image) + "36" + numberToHex(sym.val);}
+        }
+        var=varList()
+        {s = s + var;}
+    )?
+    {return s;}
+}
+
+String expression()throws SymbolAlreadyDefinedException, UnknownSymbolException:{String term; String sum;}{
+    term=term() sum=summe()
+    {return term + sum;}
+}
+
+String summe()throws SymbolAlreadyDefinedException, UnknownSymbolException:{String s="";String term;String sum; Token op;}{
+    (
+        op=<opsum> term=term() sum=summe() {
+            s = term;
+            if (op.image.equals("+"))
+                s = s + "60";
+            else s = s + "64";
+            s = s + sum;
+        }
+    )?
+    {return s;}
+}
+
+String term()throws SymbolAlreadyDefinedException, UnknownSymbolException:{String fakt; String prod;}{
+    fakt=faktor() prod=product()
+    {return fakt + prod;}
+}
+
+String product()throws SymbolAlreadyDefinedException, UnknownSymbolException:{String s="";String fakt;String prod; Token op;}{
+    (
+        op=<opprod> fakt=faktor() prod=product(){
+            if (op.image.equals("*"))
+                s = fakt + "68" + prod;
+            else s = fakt + "6C" + prod;
+        }
+    )?
+    {return s;}
+}
+
+String faktor()throws SymbolAlreadyDefinedException, UnknownSymbolException:{String s; Token t;}{
+    (t=<number> {s = "10" + numberToHex(t.image); return s;})
+    | (t=<ident> {
+        if (st.getSymbol(t.image).isVar)
+            s = "15" + numberToHex(st.getSymbol(t.image).val);
+        else s = "10" + numberToHex(st.getSymbol(t.image).val);
+        return s;
+      })
+    | ("(" s=expression() ")" {return s;})
+}
+
+String statement()throws SymbolAlreadyDefinedException, UnknownSymbolException:{String s;}{
+    <PRINT> "(" s=expression() ")" ";"
+    {return s + "b8(print)";}
+}
