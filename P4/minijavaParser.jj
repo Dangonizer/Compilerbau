@@ -103,7 +103,7 @@ String start()throws SymbolAlreadyDefinedException, UnknownSymbolException :
 {
     s=programm()
     <EOF>
-    {return s;}
+    {return s + "b1";}
 }
 
 String programm()throws SymbolAlreadyDefinedException, UnknownSymbolException:{String vc; String s;}{
