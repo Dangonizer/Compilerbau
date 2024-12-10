@@ -1,0 +1,347 @@
+PARSER_BEGIN(MiniJavaParser)
+import java.util.ArrayList;import java.util.HashMap;
+import java.util.HexFormat;
+/** Simple brace matcher. */
+public class MiniJavaParser {
+    public static SymTable st = new SymTable();
+
+  /** Main entry point. */
+  public static void main(String args[]) {
+    try {
+      MiniJavaParser parser = new MiniJavaParser(System.in);
+      System.out.println(parser.start());
+    } catch (Exception e) {
+      System.err.println(e.getMessage());
+    }
+  }
+
+  public static String numberToHex(String num){
+        return String.format("%02x",Integer.valueOf(num));
+  }
+
+  public static String numberToHex4(String num){
+          return String.format("%04x",Integer.valueOf(num));
+    }
+
+}
+
+class SymbolAlreadyDefinedException extends Exception {
+    public SymbolAlreadyDefinedException(String error){
+        super(error);
+    }
+}
+
+class UnknownSymbolException extends Exception {
+    public UnknownSymbolException(String error){
+        super(error);
+    }
+}
+
+class LWertException extends Exception {
+    public LWertException(String error){
+        super(error);
+    }
+}
+
+class Symbol{
+      public String val;
+      public Boolean isVar;
+      public Symbol(String v, Boolean i){
+          val=v;
+          isVar=i;
+      }
+}
+
+static class ByteCode{
+    final String PUSH = "10";
+    final String LOAD = "15";
+    final String STORE = "36";
+    final String ADD = "60";
+    final String SUB = "64";
+    final String MULT = "68";
+    final String DIV = "6c";
+    final String JMP_EQ = "9f";
+    final String JMP_NEQ = "a0";
+    final String JMP_LT = "a1";
+    final String JMP_GEQ = "a2";
+    final String JMP_GT = "a3";
+    final String JMP_LEQ = "a4";
+    final String GOTO = "a7";
+    final String INVOKE = "b8";
+}
+
+class SymTable {
+    HashMap<String,Symbol> tb = new HashMap<>();
+    int nextVarAdress = 1;
+
+    void addConstant(String id, String wert) throws SymbolAlreadyDefinedException{
+        if (tb.containsKey(id))
+            throw new SymbolAlreadyDefinedException("Symbol " + id + " already defined.");
+        tb.put(id,new Symbol(wert,false));
+    }
+
+    void addVariable(String id) throws SymbolAlreadyDefinedException{
+        if (tb.containsKey(id))
+            throw new SymbolAlreadyDefinedException("Symbol " + id + " already defined.");
+        tb.put(id,new Symbol(String.valueOf(nextVarAdress++),true));
+    }
+
+    Symbol getSymbol(String id) throws UnknownSymbolException{
+        if(!tb.containsKey(id))
+            throw new UnknownSymbolException("Symbol " + id + " not defined.");
+        return tb.get(id);
+    }
+}}
+}
+
+
+
+
+
+
+PARSER_END(MiniJavaParser)
+
+
+SKIP : {
+    " "
+  | "\t"
+  | "\n"
+  | "\r"
+  }
+  
+  TOKEN : {
+        <FINAL: "final">
+        | <WHILE: "while">
+        | <IF: "if">
+        | <ELSE: "else">
+        | <PRINT: "print">
+        | <INT: "int">
+
+        | <ident: ["a"-"z"] (["a"-"z"] | ["A"-"Z"] | ["0"-"9"])*>
+        | <number: "0" | (["1"-"9"] (["0"-"9"])*) >
+        | <comOP: "<" | ">" | "<=" | ">=" | "==" | "!=">
+        | <assignOP: "=">
+        | <opsum: "+" | "-" >
+        | <opprod: "*" | "/" >
+  }
+  
+
+/** Root production. */
+String start()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:
+{ArrayList<String> s;}
+{
+    s=programm()
+    <EOF>
+    {s.add("b1"); return s;}
+}
+
+ArrayList<String> programm()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> vc; ArrayList<String> s;}{
+    constDecl()
+    vc=varDecl()
+    s=statement()
+    {vc.addAll(s); return s;}
+}
+
+void constDecl()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{}{
+    (<FINAL> <INT> constZuw() constList() ";")?
+}
+
+void constZuw()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{Token id; Token val;}{
+                     id=<ident> <assignOP> val=<number> {st.addConstant(id.image,val.image);}
+}
+
+void constList()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{}{
+    ("," constZuw() constList())?
+}
+
+ArrayList<String> varDecl()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{Token id; Token val; ArrayList<String> var; ArrayList<String> s = new ArrayList<>();}{
+    (
+        <INT> id=<ident>
+        val=varZuw() {
+            st.addVariable(id.image);
+            Symbol sym = st.getSymbol(id.image);
+            if (val == null) {
+                s.add(ByteCode.PUSH);
+                s.add("00");
+                s.add(ByteCode.STORE);
+                s.add(numberToHex(sym.val));
+            }
+            else {
+                s.add(ByteCode.PUSH);
+                s.add(numberToHex(val.image));
+                s.add(ByteCode.STORE);
+                s.add(numberToHex(sym.val));
+            }
+        }
+        var=varList() ";"
+        {s.addAll(var);}
+    )?
+    {return s;}
+}
+
+Token varZuw()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{Token val=null;}{
+    (<assignOP> val=<number>)? {return val;}
+}
+
+ArrayList<String> varList()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{Token id; Token val; ArrayList<String> var; ArrayList<String> s = new ArrayList<>();}{
+    (
+        "," id=<ident>
+        val=varZuw() {
+             st.addVariable(id.image);
+             Symbol sym = st.getSymbol(id.image);
+             if (val == null) {
+                 s.add(ByteCode.PUSH);
+                 s.add("00");
+                 s.add(ByteCode.STORE);
+                 s.add(numberToHex(sym.val));
+             }
+             else {
+                 s.add(ByteCode.PUSH);
+                 s.add(numberToHex(val.image));
+                 s.add(ByteCode.STORE);
+                 s.add(numberToHex(sym.val));
+             }
+        }
+        var=varList()
+        {s.addAll(var);}
+    )?
+    {return s;}
+}
+
+ArrayList<String> expression()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> term; ArrayList<String> sum;}{
+    term=term() sum=summe()
+    {term.addAll(sum); return term;}
+}
+
+ArrayList<String> summe()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> s = new ArrayList<>(); ArrayList<String> term; ArrayList<String> sum; Token op;}{
+    (
+        op=<opsum> term=term() sum=summe() {
+            s.addAll(term);
+            if (op.image.equals("+"))
+                s.add(ByteCode.ADD);
+            else s.add(ByteCode.SUB);
+            s.addAll(sum);
+        }
+    )?
+    {return s;}
+}
+
+ArrayList<String> term()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> fakt; ArrayList<String> prod;}{
+    fakt=faktor() prod=product()
+    {
+        fakt.addAll(prod);
+        return fakt;
+    }
+}
+
+ArrayList<String> product()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> s = new ArrayList<>(); ArrayList<String> fakt; ArrayList<String> prod; Token op;}{
+    (
+        op=<opprod> fakt=faktor() prod=product(){
+            s.addAll(fakt);
+            if (op.image.equals("*")){
+                s.add(ByteCode.MULT);
+            }
+            else {s.add(ByteCode.DIV);}
+            s.addAll(prod);
+        }
+    )?
+    {return s;}
+}
+
+ArrayList<String> faktor()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> s = new ArrayList<>(); Token t;}{
+    (t=<number> {s.add(ByteCode.PUSH); s.add(numberToHex(t.image)); return s;})
+    | (t=<ident> {
+        if (st.getSymbol(t.image).isVar){
+            s.add(ByteCode.LOAD);
+            s.add(numberToHex(st.getSymbol(t.image).val));
+        }
+        else {
+            s.add(ByteCode.PUSH);
+            s.add(numberToHex(st.getSymbol(t.image).val));
+        }
+        return s;
+      })
+    | ("(" s=expression() ")" {return s;})
+}
+
+ArrayList<String> condition()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> e1; ArrayList<String> e2; Token op;}{
+    e1=expression() op=<comOP> e2=expression()
+    {
+        e1.addAll(e2);
+        switch (op){
+            case "<": e1.add(ByteCode.JMP_GEQ); break;
+            case ">": e1.add(ByteCode.JMP_LEQ); break;
+            case "<=": e1.add(ByteCode.JMP_GT); break;
+            case ">=": e1.add(ByteCode.JMP_LT); break;
+            case "==": e1.add(ByteCode.JMP_NEQ); break;
+            case "!=": e1.add(ByteCode.JMP_EQ); break;
+        }
+        return e1;
+    }
+}
+
+ArrayList<String> statement()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> s = new ArrayList<>(); ArrayList<String> h1 = new ArrayList(); ArrayList<String> h2 = new ArrayList(); Token ident;}{
+    (
+        ident=<ident> <assignOP> s=expression() ";"
+        {
+            if (!st.getSymbol(ident.image).isVar)
+                throw new LWertException(ident.image + " is not a variable");
+            else {
+                s.add(ByteCode.STORE);
+                s.add(st.getSymbol(ident.image).val);
+            }
+            return s;
+        }
+    )
+    | (
+        <PRINT> "(" s=expression() ")" ";"
+        {s.add(ByteCode.INVOKE); s.add("(print)"); s.add(""); return s;}
+    )
+    | ("{" s=stmtLIST() "}" {return s;})
+    | (
+        <IF> s=condition() h1=statement() h2=optELSE()
+        {
+            if (h2.isEmpty()){
+                s.add(numberToHex4(String.valueOf(h1.size()+3)));
+                s.add("");
+                s.addAll(h1);
+            }
+            else {
+                s.add(numberToHex4(String.valueOf(h1.size()+6)));
+                s.add("");
+                s.addAll(h1);
+                s.add(ByteCode.GOTO);
+                s.add(numberToHex4(String.valueOf(h2.size()+3)));
+                s.add("");
+                s.addAll(h2);
+            }
+            return s;
+        }
+    )
+    | (
+        <WHILE> s=condition() h1=statement()
+        {
+            s.add(numberToHex4(String.valueOf(h1.size()+6)));
+            s.add("");
+            s.addAll(h1);
+            s.add(ByteCode.GOTO);
+            s.add(numberToHex4(String.valueOf(65535-(s.size()-1))));
+            s.add("");
+            return s;
+        }
+    )
+}
+
+ArrayList<String> optELSE()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> s = new ArrayList<>();}{
+    (
+    <ELSE> s=statement()
+    )?
+    {return s;}
+}
+
+ArrayList<String> stmtLIST()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> s = new ArrayList<>(); ArrayList<String> h;}{
+    (
+    s=statement() h=stmtLIST() {s.addAll(h);}
+    )?
+    {return s;}
+}
