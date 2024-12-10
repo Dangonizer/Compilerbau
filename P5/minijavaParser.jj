@@ -9,7 +9,14 @@ public class MiniJavaParser {
   public static void main(String args[]) {
     try {
       MiniJavaParser parser = new MiniJavaParser(System.in);
-      System.out.println(parser.start());
+      ArrayList<String> codeList = parser.start();
+      String bytecode = "";
+      for (String s : codeList){
+          bytecode = bytecode + " " + s;
+      }
+      System.out.println(bytecode);
+      JavaClassFileGenerator fg = new JavaClassFileGenerator("program", true, true, true);
+      fg.generateClassFile(new MethodObject("main", 1, bytecode));
     } catch (Exception e) {
       System.err.println(e.getMessage());
     }
