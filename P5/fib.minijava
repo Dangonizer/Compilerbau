@@ -1,0 +1,11 @@
+final int n = 5;
+int cnt = 0, first = 0, second = 1, temp = 0;
+{
+  while cnt < n
+  {
+    temp = first + second;
+    first = second;
+    second = temp;
+    cnt = cnt + 1;
+  }
+}

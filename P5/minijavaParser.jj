@@ -52,22 +52,22 @@ class Symbol{
       }
 }
 
-static class ByteCode{
-    final String PUSH = "10";
-    final String LOAD = "15";
-    final String STORE = "36";
-    final String ADD = "60";
-    final String SUB = "64";
-    final String MULT = "68";
-    final String DIV = "6c";
-    final String JMP_EQ = "9f";
-    final String JMP_NEQ = "a0";
-    final String JMP_LT = "a1";
-    final String JMP_GEQ = "a2";
-    final String JMP_GT = "a3";
-    final String JMP_LEQ = "a4";
-    final String GOTO = "a7";
-    final String INVOKE = "b8";
+class ByteCode{
+   static final String PUSH = "10";
+   static final String LOAD = "15";
+   static final String STORE = "36";
+   static final String ADD = "60";
+   static final String SUB = "64";
+   static final String MULT = "68";
+   static final String DIV = "6c";
+   static final String JMP_EQ = "9f";
+   static final String JMP_NEQ = "a0";
+   static final String JMP_LT = "a1";
+   static final String JMP_GEQ = "a2";
+   static final String JMP_GT = "a3";
+   static final String JMP_LEQ = "a4";
+   static final String GOTO = "a7";
+   static final String INVOKE = "b8";
 }
 
 class SymTable {
@@ -91,8 +91,8 @@ class SymTable {
             throw new UnknownSymbolException("Symbol " + id + " not defined.");
         return tb.get(id);
     }
-}}
 }
+
 
 
 
@@ -127,7 +127,7 @@ SKIP : {
   
 
 /** Root production. */
-String start()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:
+ArrayList start()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:
 {ArrayList<String> s;}
 {
     s=programm()
@@ -139,7 +139,7 @@ ArrayList<String> programm()throws SymbolAlreadyDefinedException, UnknownSymbolE
     constDecl()
     vc=varDecl()
     s=statement()
-    {vc.addAll(s); return s;}
+    {vc.addAll(s); return vc;}
 }
 
 void constDecl()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{}{
@@ -268,7 +268,7 @@ ArrayList<String> condition()throws SymbolAlreadyDefinedException, UnknownSymbol
     e1=expression() op=<comOP> e2=expression()
     {
         e1.addAll(e2);
-        switch (op){
+        switch (op.image){
             case "<": e1.add(ByteCode.JMP_GEQ); break;
             case ">": e1.add(ByteCode.JMP_LEQ); break;
             case "<=": e1.add(ByteCode.JMP_GT); break;
@@ -280,15 +280,15 @@ ArrayList<String> condition()throws SymbolAlreadyDefinedException, UnknownSymbol
     }
 }
 
-ArrayList<String> statement()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> s = new ArrayList<>(); ArrayList<String> h1 = new ArrayList(); ArrayList<String> h2 = new ArrayList(); Token ident;}{
+ArrayList<String> statement()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException:{ArrayList<String> s = new ArrayList<>(); ArrayList<String> h1 = new ArrayList<>(); ArrayList<String> h2 = new ArrayList<>(); Token id;}{
     (
-        ident=<ident> <assignOP> s=expression() ";"
+        id=<ident> <assignOP> s=expression() ";"
         {
-            if (!st.getSymbol(ident.image).isVar)
-                throw new LWertException(ident.image + " is not a variable");
+            if (!st.getSymbol(id.image).isVar)
+                throw new LWertException(id.image + " is not a variable");
             else {
                 s.add(ByteCode.STORE);
-                s.add(st.getSymbol(ident.image).val);
+                s.add(numberToHex(st.getSymbol(id.image).val));
             }
             return s;
         }
@@ -325,7 +325,7 @@ ArrayList<String> statement()throws SymbolAlreadyDefinedException, UnknownSymbol
             s.add("");
             s.addAll(h1);
             s.add(ByteCode.GOTO);
-            s.add(numberToHex4(String.valueOf(65535-(s.size()-1))));
+            s.add(numberToHex4(String.valueOf(65535-s.size()+2)));
             s.add("");
             return s;
         }
