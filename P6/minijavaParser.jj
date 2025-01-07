@@ -1,0 +1,553 @@
+PARSER_BEGIN(MiniJavaParser)
+import java.util.ArrayList;import java.util.HashMap;
+import java.util.HexFormat;
+/** Simple brace matcher. */
+public class MiniJavaParser {
+    public static SymTable st = new SymTable();
+
+  /** Main entry point. */
+  public static void main(String args[]) {
+    try {
+      MiniJavaParser parser = new MiniJavaParser(System.in);
+      ArrayList<Method> codeList = parser.programm();
+      //System.out.println(bytecode);
+      ArrayList<MethodObject> mo = new ArrayList<>();
+      for (Method m : codeList){
+          mo.add(new MethodObject(m.name, m.argSize, m.bytecode));
+      }
+      JavaClassFileGenerator fg = new JavaClassFileGenerator("program", true, true, true);
+      fg.generateClassFile(mo.toArray(new MethodObject[mo.size()]));
+    } catch (Exception e) {
+      System.err.println(e.getMessage());
+    }
+  }
+
+  public static String numberToHex(String num){
+        return String.format("%02x",Integer.valueOf(num));
+  }
+
+  public static String numberToHex4(String num){
+          return String.format("%04x",Integer.valueOf(num));
+    }
+
+  public static ArrayList<String> genericLoad(ScopedSymbol s){
+      ArrayList<String> code = new ArrayList<>();
+      if (s.isLocal){
+          code.add(ByteCode.LOAD);
+          code.add(numberToHex(s.val));
+      }
+      else {
+          code.add(ByteCode.GETSTATIC);
+          code.add("[g" + s.val + "]");
+          code.add("");
+      }
+      return code;
+  }
+
+  public static ArrayList<String> genericStore(ScopedSymbol s){
+        ArrayList<String> code = new ArrayList<>();
+        if (s.isLocal){
+            code.add(ByteCode.STORE);
+            code.add(numberToHex(s.val));
+        }
+        else {
+            code.add(ByteCode.PUTSTATIC);
+            code.add("[g" + s.val + "]");
+            code.add("");
+        }
+        return code;
+    }
+
+}
+
+class SymbolAlreadyDefinedException extends Exception {
+    public SymbolAlreadyDefinedException(String error){
+        super(error);
+    }
+}
+
+class UnknownSymbolException extends Exception {
+    public UnknownSymbolException(String error){
+        super(error);
+    }
+}
+
+class LWertException extends Exception {
+    public LWertException(String error){
+        super(error);
+    }
+}
+
+class RWertException extends Exception {
+    public RWertException(String error){
+        super(error);
+    }
+}
+
+class WrongParameterException extends Exception {
+    public WrongParameterException(String error){
+        super(error);
+    }
+}
+
+class Symbol{
+      public String val;
+      public Boolean isVar;
+      public Symbol(String v, Boolean i){
+          val=v;
+          isVar=i;
+      }
+}
+
+class ScopedSymbol{
+      public String val;
+      public Boolean isVar;
+      public Boolean isLocal;
+      public ScopedSymbol(String v, Boolean i, Boolean l){
+          val=v;
+          isVar=i;
+          isLocal=l;
+      }
+}
+
+class Parameter{
+    public ArrayList<String> s;
+    public int paramSize;
+    public Parameter(ArrayList<String> code, int parameterSize){
+        s = code;
+        paramSize = parameterSize;
+    }
+}
+
+class ByteCode{
+   static final String PUSH = "10";
+   static final String LOAD = "15";
+   static final String STORE = "36";
+   static final String ADD = "60";
+   static final String SUB = "64";
+   static final String MULT = "68";
+   static final String DIV = "6c";
+   static final String JMP_EQ = "9f";
+   static final String JMP_NEQ = "a0";
+   static final String JMP_LT = "a1";
+   static final String JMP_GEQ = "a2";
+   static final String JMP_GT = "a3";
+   static final String JMP_LEQ = "a4";
+   static final String GETSTATIC = "b2";
+   static final String PUTSTATIC = "b3";
+   static final String GOTO = "a7";
+   static final String RETURN = "b1";
+   static final String IRETURN = "ac";
+   static final String INVOKE = "b8";
+}
+
+class SymTable {
+    HashMap<String,Symbol> tb = new HashMap<>();
+    HashMap<String,Symbol> lt = new HashMap<>();
+    HashMap<String,Integer> ft = new HashMap<>();
+    HashMap<String,Integer> pt = new HashMap<>();
+
+    int nextVarAdress = 1;
+    int nextLocalAdress = 0;
+    boolean inFunProc = false;
+
+    void createLocalTable(){
+        inFunProc = true;
+    }
+
+    void deleteLocalTable(){
+        nextLocalAdress = 0;
+        lt = new HashMap<>();
+        inFunProc = false;
+    }
+
+    void addConstant(String id, String wert) throws SymbolAlreadyDefinedException{
+        HashMap<String,Symbol> table = inFunProc ? lt : tb;
+        if (table.containsKey(id))
+            throw new SymbolAlreadyDefinedException("Symbol " + id + " already defined.");
+        table.put(id,new Symbol(wert,false));
+    }
+
+    void addVariable(String id) throws SymbolAlreadyDefinedException{
+        HashMap<String,Symbol> table = inFunProc ? lt : tb;
+        if (table.containsKey(id))
+            throw new SymbolAlreadyDefinedException("Symbol " + id + " already defined.");
+        if (inFunProc)
+            table.put(id,new Symbol(String.valueOf(nextLocalAdress++),true));
+        else
+            table.put(id,new Symbol(String.valueOf(nextVarAdress++),true));
+    }
+
+    ScopedSymbol getSymbol(String id) throws UnknownSymbolException{
+        if (inFunProc){
+            if(lt.containsKey(id)){
+                Symbol s = lt.get(id);
+                return new ScopedSymbol(s.val,s.isVar,true);
+                }
+        }
+        else if(!tb.containsKey(id))
+            throw new UnknownSymbolException("Symbol " + id + " not defined.");
+        Symbol s = tb.get(id);
+        return new ScopedSymbol(s.val,s.isVar,false);
+    }
+
+    void addProcedure(String name, int argSize) throws SymbolAlreadyDefinedException{
+        if (pt.containsKey(name) || ft.containsKey(name))
+            throw new SymbolAlreadyDefinedException("Method " + name + " already defined.");
+        else pt.put(name,argSize);
+    }
+
+    void addFunction(String name, int argSize) throws SymbolAlreadyDefinedException{
+            if (pt.containsKey(name) || ft.containsKey(name))
+                throw new SymbolAlreadyDefinedException("Method " + name + " already defined.");
+            else ft.put(name,argSize);
+        }
+
+    int getFunction(String name) throws UnknownSymbolException{
+        if (ft.containsKey(name))
+            return ft.get(name);
+        else throw new UnknownSymbolException("Function " + name + " not defined.");
+    }
+
+    int getProcedure(String name) throws UnknownSymbolException{
+            if (pt.containsKey(name))
+                return pt.get(name);
+            else throw new UnknownSymbolException("Procedure " + name + " not defined.");
+        }
+}
+
+class Method{
+    public String name;
+    public int argSize;
+    public String bytecode;
+
+    Method(String n, int a, ArrayList<String> b){
+        name = n;
+        argSize = a;
+        bytecode = "";
+        for (String s : b){
+            bytecode = bytecode + " " + s;
+        }
+    }
+}
+
+
+
+
+
+PARSER_END(MiniJavaParser)
+
+
+SKIP : {
+    " "
+  | "\t"
+  | "\n"
+  | "\r"
+  }
+  
+  TOKEN : {
+        <FINAL: "final">
+        | <WHILE: "while">
+        | <IF: "if">
+        | <ELSE: "else">
+        | <PRINT: "print">
+        | <INT: "int">
+        | <VOID: "void">
+        | <FUNC: "func">
+        | <RETURN: "return">
+
+        | <ident: ["a"-"z"] (["a"-"z"] | ["A"-"Z"] | ["0"-"9"])*>
+        | <number: "0" | (["1"-"9"] (["0"-"9"])*) >
+        | <comOP: "<" | ">" | "<=" | ">=" | "==" | "!=">
+        | <assignOP: "=">
+        | <opsum: "+" | "-" >
+        | <opprod: "*" | "/" >
+  }
+  
+
+ArrayList<Method> programm()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> vc; ArrayList<String> s; ArrayList<Method> p = new ArrayList<>(); ArrayList<Method> f= new ArrayList<>(); Method m;}{
+    constDecl()
+    vc=varDecl()
+    (
+      m=procedure()
+      {p.add(m);}
+    )*
+    (
+      m=function()
+      {f.add(m);}
+    )*
+    s=statement()
+    <EOF>
+    {
+        vc.addAll(s);
+        vc.add(ByteCode.RETURN);
+        Method main = new Method("main",1,vc);
+        p.addAll(f);
+        p.add(main);
+        return p;
+    }
+}
+
+void constDecl()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{}{
+    (<FINAL> <INT> constZuw() constList() ";")?
+}
+
+void constZuw()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{Token id; Token val;}{
+                     id=<ident> <assignOP> val=<number> {st.addConstant(id.image,val.image);}
+}
+
+void constList()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{}{
+    ("," constZuw() constList())?
+}
+
+ArrayList<String> varDecl()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{Token id; Token val; ArrayList<String> var; ArrayList<String> s = new ArrayList<>();}{
+    (
+        <INT> id=<ident>
+        val=varZuw() {
+            st.addVariable(id.image);
+            ScopedSymbol sym = st.getSymbol(id.image);
+            if (val == null) {
+                s.add(ByteCode.PUSH);
+                s.add("00");
+                s.addAll(genericStore(sym));
+            }
+            else {
+                s.add(ByteCode.PUSH);
+                s.add(numberToHex(val.image));
+                s.addAll(genericStore(sym));
+            }
+        }
+        var=varList() ";"
+        {s.addAll(var);}
+    )?
+    {return s;}
+}
+
+Token varZuw()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{Token val=null;}{
+    (<assignOP> val=<number>)? {return val;}
+}
+
+ArrayList<String> varList()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{Token id; Token val; ArrayList<String> var; ArrayList<String> s = new ArrayList<>();}{
+    (
+        "," id=<ident>
+        val=varZuw() {
+             st.addVariable(id.image);
+             ScopedSymbol sym = st.getSymbol(id.image);
+             if (val == null) {
+                 s.add(ByteCode.PUSH);
+                 s.add("00");
+                 s.addAll(genericStore(sym));
+             }
+             else {
+                 s.add(ByteCode.PUSH);
+                 s.add(numberToHex(val.image));
+                 s.addAll(genericStore(sym));
+             }
+        }
+        var=varList()
+        {s.addAll(var);}
+    )?
+    {return s;}
+}
+
+Method procedure() throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{Token name; int argS; ArrayList<String> s;}{
+    {st.createLocalTable();}
+    <VOID> name=<ident> "(" (routinenParameter())*
+    {argS = st.nextLocalAdress; st.addProcedure(name.image,argS);}
+    ")" "{" s=routinenBlock() "}"
+    {s.add(ByteCode.RETURN); st.deleteLocalTable(); return new Method(name.image,argS,s);}
+}
+
+Method function() throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{Token name; int argS; ArrayList<String> s; ArrayList<String> e;}{
+    {st.createLocalTable();}
+    <FUNC> name=<ident> "(" (routinenParameter())*
+    {argS = st.nextLocalAdress; st.addFunction(name.image,argS);}
+    ")" "{" s=routinenBlock() <RETURN> e=expression() ";" "}"
+    {s.addAll(e); s.add(ByteCode.IRETURN); st.deleteLocalTable(); return new Method(name.image,argS,s);}
+}
+
+void routinenParameter() throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{Token name;}{
+    <INT> name=<ident>
+    {st.addVariable(name.image);}
+    ("," <INT> name=<ident> {st.addVariable(name.image);} )*
+}
+
+ArrayList<String> routinenBlock() throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> vc; ArrayList<String> s;}{
+    constDecl() vc=varDecl() s=statement()
+    {vc.addAll(s); return vc; }
+}
+
+ArrayList<String> expression()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> term; ArrayList<String> sum;}{
+    term=term() sum=summe()
+    {term.addAll(sum); return term;}
+}
+
+ArrayList<String> summe()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> s = new ArrayList<>(); ArrayList<String> term; ArrayList<String> sum; Token op;}{
+    (
+        op=<opsum> term=term() sum=summe() {
+            s.addAll(term);
+            if (op.image.equals("+"))
+                s.add(ByteCode.ADD);
+            else s.add(ByteCode.SUB);
+            s.addAll(sum);
+        }
+    )?
+    {return s;}
+}
+
+ArrayList<String> term()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> fakt; ArrayList<String> prod;}{
+    fakt=faktor() prod=product()
+    {
+        fakt.addAll(prod);
+        return fakt;
+    }
+}
+
+ArrayList<String> product()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> s = new ArrayList<>(); ArrayList<String> fakt; ArrayList<String> prod; Token op;}{
+    (
+        op=<opprod> fakt=faktor() prod=product(){
+            s.addAll(fakt);
+            if (op.image.equals("*")){
+                s.add(ByteCode.MULT);
+            }
+            else {s.add(ByteCode.DIV);}
+            s.addAll(prod);
+        }
+    )?
+    {return s;}
+}
+
+ArrayList<String> faktor()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> s = new ArrayList<>(); Token t; Parameter fc = null;}{
+    (t=<number> {s.add(ByteCode.PUSH); s.add(numberToHex(t.image)); return s;})
+    | (t=<ident> (fc=functionCall())? {
+        if (fc == null){
+            if (st.getSymbol(t.image).isVar){
+                s.addAll(genericLoad(st.getSymbol(t.image)));
+            }
+            else {
+                s.add(ByteCode.PUSH);
+                s.add(numberToHex(st.getSymbol(t.image).val));
+            }
+            return s;
+        }
+        else {
+            if (st.getFunction(t.image) != fc.paramSize){
+                throw new WrongParameterException("Wrong amount of parameters");
+            }
+            else {
+                fc.s.add(ByteCode.INVOKE);
+                fc.s.add("(" + t.image+ ")");
+                fc.s.add("");
+                return fc.s;
+            }
+        }
+      })
+    | ("(" s=expression() ")" {return s;})
+}
+
+ArrayList<String> condition()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> e1; ArrayList<String> e2; Token op;}{
+    e1=expression() op=<comOP> e2=expression()
+    {
+        e1.addAll(e2);
+        switch (op.image){
+            case "<": e1.add(ByteCode.JMP_GEQ); break;
+            case ">": e1.add(ByteCode.JMP_LEQ); break;
+            case "<=": e1.add(ByteCode.JMP_GT); break;
+            case ">=": e1.add(ByteCode.JMP_LT); break;
+            case "==": e1.add(ByteCode.JMP_NEQ); break;
+            case "!=": e1.add(ByteCode.JMP_EQ); break;
+        }
+        return e1;
+    }
+}
+
+Parameter functionCall() throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> s = new ArrayList(); ArrayList<String> e; int size = 0;}{
+    "(" ( s=expression() {size++;} ("," e=expression() {s.addAll(e); size++;} )* )* ")"
+    {return new Parameter(s,size);}
+}
+
+Parameter procCall() throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> s = new ArrayList(); ArrayList<String> e; int size = 0;}{
+    "(" ( s=expression() {size++;} ("," e=expression() {s.addAll(e); size++;} )* )* ")"
+    {return new Parameter(s,size);}
+}
+
+ArrayList<String> statement()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> s = new ArrayList<>(); ArrayList<String> h1 = new ArrayList<>(); ArrayList<String> h2 = new ArrayList<>(); Token id; Parameter p;}{
+       (
+        id=<ident>
+         ((<assignOP> s=expression() ";"
+            {
+                if (!st.getSymbol(id.image).isVar)
+                    throw new LWertException(id.image + " is not a variable");
+                else {
+                    s.addAll(genericStore(st.getSymbol(id.image)));
+                }
+                return s;
+            }
+            )
+        |(
+            p=procCall()
+            {
+                if(p.paramSize != st.getProcedure(id.image)){
+                    throw new WrongParameterException("Wrong amount of parameters");
+                }
+                else {
+                    p.s.add(ByteCode.INVOKE);
+                    p.s.add("(" + id.image+ ")");
+                    p.s.add("");
+                    return p.s;
+                }
+            }
+        )
+    ))
+    | (
+        <PRINT> "(" s=expression() ")" ";"
+        {s.add(ByteCode.INVOKE); s.add("(print)"); s.add(""); return s;}
+    )
+    | ("{" s=stmtLIST() "}" {return s;})
+    | (
+        <IF> s=condition() h1=statement() h2=optELSE()
+        {
+            if (h2.isEmpty()){
+                s.add(numberToHex4(String.valueOf(h1.size()+3)));
+                s.add("");
+                s.addAll(h1);
+            }
+            else {
+                s.add(numberToHex4(String.valueOf(h1.size()+6)));
+                s.add("");
+                s.addAll(h1);
+                s.add(ByteCode.GOTO);
+                s.add(numberToHex4(String.valueOf(h2.size()+3)));
+                s.add("");
+                s.addAll(h2);
+            }
+            return s;
+        }
+    )
+    | (
+        <WHILE> s=condition() h1=statement()
+        {
+            s.add(numberToHex4(String.valueOf(h1.size()+6)));
+            s.add("");
+            s.addAll(h1);
+            s.add(ByteCode.GOTO);
+            s.add(numberToHex4(String.valueOf(65535-s.size()+2)));
+            s.add("");
+            return s;
+        }
+    )
+}
+
+ArrayList<String> optELSE()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> s = new ArrayList<>();}{
+    (
+    <ELSE> s=statement()
+    )?
+    {return s;}
+}
+
+ArrayList<String> stmtLIST()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> s = new ArrayList<>(); ArrayList<String> h;}{
+    (
+    s=statement() h=stmtLIST() {s.addAll(h);}
+    )?
+    {return s;}
+}
