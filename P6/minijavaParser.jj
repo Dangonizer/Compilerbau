@@ -485,7 +485,7 @@ ArrayList<String> statement()throws SymbolAlreadyDefinedException, UnknownSymbol
             }
             )
         |(
-            p=procCall()
+            p=procCall() ";"
             {
                 if(p.paramSize != st.getProcedure(id.image)){
                     throw new WrongParameterException("Wrong amount of parameters");
