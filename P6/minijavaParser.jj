@@ -474,7 +474,15 @@ Parameter procCall() throws SymbolAlreadyDefinedException, UnknownSymbolExceptio
 ArrayList<String> statement()throws SymbolAlreadyDefinedException, UnknownSymbolException, LWertException, RWertException, WrongParameterException:{ArrayList<String> s = new ArrayList<>(); ArrayList<String> h1 = new ArrayList<>(); ArrayList<String> h2 = new ArrayList<>(); Token id; Parameter p;}{
        (
         id=<ident>
-         ((<assignOP> s=expression() ";"
+         ((<assignOP> {
+                        try {
+                        s=expression();
+                        }
+                        catch(Exception e){
+                            throw new RWertException("Invalid right side of assignment");
+                        }
+                      }
+                        ";"
             {
                 if (!st.getSymbol(id.image).isVar)
                     throw new LWertException(id.image + " is not a variable");
